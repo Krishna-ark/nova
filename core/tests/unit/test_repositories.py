@@ -220,10 +220,7 @@ async def test_preference_list_all_is_ordered_by_key(
         await preferences.set(key, "1")
     await session.commit()
 
-    keys = [
-        preference.key
-        for preference in await preferences.list_all()
-    ]
+    keys = [preference.key for preference in await preferences.list_all()]
 
     assert keys == ["alpha", "mike", "zulu"]
 
@@ -295,12 +292,7 @@ async def test_device_add_assigns_an_id_before_commit(
 async def test_device_get_returns_none_for_unknown_id(
     devices: DeviceRepository,
 ) -> None:
-    assert (
-        await devices.get(
-            "00000000-0000-0000-0000-000000000000"
-        )
-        is None
-    )
+    assert await devices.get("00000000-0000-0000-0000-000000000000") is None
 
 
 async def test_device_get_by_name(
@@ -334,9 +326,7 @@ async def test_device_get_by_public_key(
     )
     await session.commit()
 
-    found = await devices.get_by_public_key(
-        "ed25519-public-key"
-    )
+    found = await devices.get_by_public_key("ed25519-public-key")
 
     assert found is not None
     assert found.name == "keyed"
@@ -356,10 +346,7 @@ async def test_device_list_all_is_ordered_by_name(
         await devices.add(_device(name))
     await session.commit()
 
-    names = [
-        device.name
-        for device in await devices.list_all()
-    ]
+    names = [device.name for device in await devices.list_all()]
 
     assert names == ["laptop", "phone", "tablet"]
 
@@ -394,10 +381,7 @@ async def test_device_list_authorized_filters_by_status(
     )
     await session.commit()
 
-    names = [
-        device.name
-        for device in await devices.list_authorized()
-    ]
+    names = [device.name for device in await devices.list_authorized()]
 
     assert names == ["authorized-device"]
 
@@ -509,9 +493,7 @@ async def test_audit_add_and_get(
     audit: AuditEventRepository,
     session: AsyncSession,
 ) -> None:
-    event = await audit.add(
-        _audit_event(hash_value="a" * 64)
-    )
+    event = await audit.add(_audit_event(hash_value="a" * 64))
     await session.commit()
 
     stored = await audit.get(event.id)
@@ -524,9 +506,7 @@ async def test_audit_add_and_get(
 async def test_audit_add_assigns_an_id_before_commit(
     audit: AuditEventRepository,
 ) -> None:
-    event = await audit.add(
-        _audit_event(hash_value="b" * 64)
-    )
+    event = await audit.add(_audit_event(hash_value="b" * 64))
 
     assert event.id >= 1
 
@@ -544,11 +524,7 @@ async def test_audit_count(
     assert await audit.count() == 0
 
     for index in range(3):
-        await audit.add(
-            _audit_event(
-                hash_value=f"{index:064d}"
-            )
-        )
+        await audit.add(_audit_event(hash_value=f"{index:064d}"))
 
     await session.commit()
 
@@ -566,17 +542,12 @@ async def test_audit_list_recent_returns_newest_first(
             hash_value=f"{index:064d}",
             action=f"action.{index}",
         )
-        event.occurred_at = (
-            base_time + timedelta(minutes=index)
-        )
+        event.occurred_at = base_time + timedelta(minutes=index)
         await audit.add(event)
 
     await session.commit()
 
-    actions = [
-        event.action
-        for event in await audit.list_recent()
-    ]
+    actions = [event.action for event in await audit.list_recent()]
 
     assert actions == [
         "action.2",
@@ -590,17 +561,11 @@ async def test_audit_list_recent_respects_the_limit(
     session: AsyncSession,
 ) -> None:
     for index in range(10):
-        await audit.add(
-            _audit_event(
-                hash_value=f"{index:064d}"
-            )
-        )
+        await audit.add(_audit_event(hash_value=f"{index:064d}"))
 
     await session.commit()
 
-    assert len(
-        await audit.list_recent(limit=4)
-    ) == 4
+    assert len(await audit.list_recent(limit=4)) == 4
 
 
 async def test_audit_list_recent_is_empty_initially(
@@ -626,10 +591,7 @@ async def test_audit_ordering_is_stable_for_identical_timestamps(
 
     await session.commit()
 
-    ids = [
-        event.id
-        for event in await audit.list_recent()
-    ]
+    ids = [event.id for event in await audit.list_recent()]
 
     assert ids == sorted(ids, reverse=True)
 
@@ -687,23 +649,21 @@ async def test_audit_list_for_device_respects_the_limit(
 
     await session.commit()
 
-    assert len(
-        await audit.list_for_device(
-            device.id,
-            limit=2,
+    assert (
+        len(
+            await audit.list_for_device(
+                device.id,
+                limit=2,
+            )
         )
-    ) == 2
+        == 2
+    )
 
 
 async def test_audit_list_for_unknown_device_is_empty(
     audit: AuditEventRepository,
 ) -> None:
-    assert (
-        await audit.list_for_device(
-            "00000000-0000-0000-0000-000000000000"
-        )
-        == []
-    )
+    assert await audit.list_for_device("00000000-0000-0000-0000-000000000000") == []
 
 
 @pytest.mark.parametrize(
@@ -731,11 +691,7 @@ async def test_audit_stores_every_result_state(
 
 async def test_audit_repository_is_append_only() -> None:
     """No mutation method may be added "for symmetry"."""
-    public = {
-        name
-        for name in dir(AuditEventRepository)
-        if not name.startswith("_")
-    }
+    public = {name for name in dir(AuditEventRepository) if not name.startswith("_")}
 
     assert public == {
         "add",
@@ -752,15 +708,11 @@ async def test_duplicate_audit_hash_raises(
     audit: AuditEventRepository,
     session: AsyncSession,
 ) -> None:
-    await audit.add(
-        _audit_event(hash_value="c" * 64)
-    )
+    await audit.add(_audit_event(hash_value="c" * 64))
     await session.commit()
 
     with pytest.raises(IntegrityError):
-        await audit.add(
-            _audit_event(hash_value="c" * 64)
-        )
+        await audit.add(_audit_event(hash_value="c" * 64))
 
 
 # --- Foreign keys ---
@@ -779,9 +731,7 @@ async def test_audit_for_unknown_device_violates_the_foreign_key(
         await audit.add(
             _audit_event(
                 hash_value="d" * 64,
-                device_id=(
-                    "00000000-0000-0000-0000-000000000000"
-                ),
+                device_id=("00000000-0000-0000-0000-000000000000"),
             )
         )
 
@@ -823,12 +773,7 @@ async def test_repository_does_not_commit_on_its_own(
         await first.rollback()
 
     async with database.session() as second:
-        assert (
-            await PreferenceRepository(second).get(
-                "uncommitted"
-            )
-            is None
-        )
+        assert await PreferenceRepository(second).get("uncommitted") is None
 
 
 async def test_committed_work_is_visible_to_a_new_session(
@@ -842,9 +787,7 @@ async def test_committed_work_is_visible_to_a_new_session(
         await first.commit()
 
     async with database.session() as second:
-        stored = await PreferenceRepository(second).get(
-            "committed"
-        )
+        stored = await PreferenceRepository(second).get("committed")
 
         assert stored is not None
         assert stored.value == "1"
@@ -854,18 +797,11 @@ async def test_device_add_is_rolled_back_without_commit(
     database: Database,
 ) -> None:
     async with database.session() as first:
-        await DeviceRepository(first).add(
-            _device("ghost")
-        )
+        await DeviceRepository(first).add(_device("ghost"))
         await first.rollback()
 
     async with database.session() as second:
-        assert (
-            await DeviceRepository(second).get_by_name(
-                "ghost"
-            )
-            is None
-        )
+        assert await DeviceRepository(second).get_by_name("ghost") is None
 
 
 async def test_audit_add_is_rolled_back_without_commit(
@@ -873,16 +809,11 @@ async def test_audit_add_is_rolled_back_without_commit(
 ) -> None:
     """Even an audit insert obeys the caller's transaction boundary."""
     async with database.session() as first:
-        await AuditEventRepository(first).add(
-            _audit_event(hash_value="f" * 64)
-        )
+        await AuditEventRepository(first).add(_audit_event(hash_value="f" * 64))
         await first.rollback()
 
     async with database.session() as second:
-        assert (
-            await AuditEventRepository(second).count()
-            == 0
-        )
+        assert await AuditEventRepository(second).count() == 0
 
 
 async def test_multiple_repositories_share_one_transaction(
@@ -890,9 +821,7 @@ async def test_multiple_repositories_share_one_transaction(
 ) -> None:
     """A device and its audit entry must be able to commit atomically."""
     async with database.session() as active:
-        device = await DeviceRepository(active).add(
-            _device("atomic")
-        )
+        device = await DeviceRepository(active).add(_device("atomic"))
 
         await AuditEventRepository(active).add(
             _audit_event(
@@ -904,16 +833,8 @@ async def test_multiple_repositories_share_one_transaction(
         await active.rollback()
 
     async with database.session() as verify:
-        assert (
-            await DeviceRepository(verify).get_by_name(
-                "atomic"
-            )
-            is None
-        )
-        assert (
-            await AuditEventRepository(verify).count()
-            == 0
-        )
+        assert await DeviceRepository(verify).get_by_name("atomic") is None
+        assert await AuditEventRepository(verify).count() == 0
 
 
 # --- Isolation ---
@@ -928,12 +849,7 @@ async def test_repositories_bind_to_the_session_they_are_given(
             "1",
         )
 
-        assert (
-            await PreferenceRepository(second).get(
-                "session-scoped"
-            )
-            is None
-        )
+        assert await PreferenceRepository(second).get("session-scoped") is None
 
 
 async def test_database_stays_in_the_temporary_directory(

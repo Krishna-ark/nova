@@ -36,9 +36,7 @@ class PreferenceRepository:
 
     async def list_all(self) -> Sequence[Preference]:
         """Return every preference, ordered by key for stable output."""
-        result = await self._session.execute(
-            select(Preference).order_by(Preference.key)
-        )
+        result = await self._session.execute(select(Preference).order_by(Preference.key))
         return result.scalars().all()
 
     async def exists(self, key: str) -> bool:

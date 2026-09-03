@@ -47,9 +47,7 @@ async def websocket_echo(websocket: WebSocket, settings: Settings) -> None:
         websocket: The incoming connection.
         settings: Validated application configuration.
     """
-    provided = extract_bearer_token(
-        websocket.headers.get("authorization")
-    )
+    provided = extract_bearer_token(websocket.headers.get("authorization"))
 
     if not token_is_valid(
         provided,
@@ -80,9 +78,7 @@ async def websocket_echo(websocket: WebSocket, settings: Settings) -> None:
                     client=_client_label(websocket),
                     length=len(message),
                 )
-                await websocket.close(
-                    code=CLOSE_POLICY_VIOLATION
-                )
+                await websocket.close(code=CLOSE_POLICY_VIOLATION)
                 return
 
             await websocket.send_text(message)

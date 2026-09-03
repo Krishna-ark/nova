@@ -39,9 +39,7 @@ def _config(database_path: Path) -> Config:
     """Return an Alembic config targeting a temporary database."""
     config = Config()
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
-    config.attributes["sqlalchemy.url"] = (
-        f"sqlite+aiosqlite:///{database_path.as_posix()}"
-    )
+    config.attributes["sqlalchemy.url"] = f"sqlite+aiosqlite:///{database_path.as_posix()}"
     return config
 
 
@@ -259,9 +257,9 @@ def test_unique_constraints_are_preserved(
     finally:
         engine.dispose()
 
-    assert any(
-        constraint["column_names"] == columns for constraint in constraints
-    ), f"unique constraint on {table}.{columns} missing"
+    assert any(constraint["column_names"] == columns for constraint in constraints), (
+        f"unique constraint on {table}.{columns} missing"
+    )
 
 
 @pytest.mark.parametrize(
@@ -300,8 +298,7 @@ def test_audit_hash_chain_columns_are_created(tmp_path: Path) -> None:
     try:
         with engine.connect() as connection:
             columns = {
-                column["name"]: column
-                for column in inspect(connection).get_columns("audit_events")
+                column["name"]: column for column in inspect(connection).get_columns("audit_events")
             }
     finally:
         engine.dispose()
@@ -319,8 +316,7 @@ def test_nullable_public_key_is_preserved(tmp_path: Path) -> None:
     try:
         with engine.connect() as connection:
             columns = {
-                column["name"]: column
-                for column in inspect(connection).get_columns("devices")
+                column["name"]: column for column in inspect(connection).get_columns("devices")
             }
     finally:
         engine.dispose()
@@ -338,12 +334,8 @@ def test_indexes_are_preserved(tmp_path: Path) -> None:
     try:
         with engine.connect() as connection:
             inspector = inspect(connection)
-            device_indexes = {
-                index["name"] for index in inspector.get_indexes("devices")
-            }
-            audit_indexes = {
-                index["name"] for index in inspector.get_indexes("audit_events")
-            }
+            device_indexes = {index["name"] for index in inspector.get_indexes("devices")}
+            audit_indexes = {index["name"] for index in inspector.get_indexes("audit_events")}
     finally:
         engine.dispose()
 

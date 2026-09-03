@@ -81,7 +81,5 @@ class AuditEventRepository:
 
     async def count(self) -> int:
         """Return the total number of recorded events."""
-        result = await self._session.execute(
-            select(func.count()).select_from(AuditEvent)
-        )
+        result = await self._session.execute(select(func.count()).select_from(AuditEvent))
         return result.scalar_one()

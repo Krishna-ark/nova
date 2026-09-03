@@ -100,10 +100,13 @@ def test_extract_bearer_token_rejects_bad_headers(
 
 
 def test_token_is_valid_accepts_the_configured_token() -> None:
-    assert token_is_valid(
-        FAKE_TOKEN,
-        SecretStr(FAKE_TOKEN),
-    ) is True
+    assert (
+        token_is_valid(
+            FAKE_TOKEN,
+            SecretStr(FAKE_TOKEN),
+        )
+        is True
+    )
 
 
 @pytest.mark.parametrize(
@@ -119,17 +122,23 @@ def test_token_is_valid_accepts_the_configured_token() -> None:
 def test_token_is_valid_rejects_anything_else(
     provided: str | None,
 ) -> None:
-    assert token_is_valid(
-        provided,
-        SecretStr(FAKE_TOKEN),
-    ) is False
+    assert (
+        token_is_valid(
+            provided,
+            SecretStr(FAKE_TOKEN),
+        )
+        is False
+    )
 
 
 def test_token_comparison_is_case_sensitive() -> None:
-    assert token_is_valid(
-        FAKE_TOKEN.upper(),
-        SecretStr(FAKE_TOKEN),
-    ) is False
+    assert (
+        token_is_valid(
+            FAKE_TOKEN.upper(),
+            SecretStr(FAKE_TOKEN),
+        )
+        is False
+    )
 
 
 # --- Authentication on the endpoint ---
@@ -232,15 +241,9 @@ def test_multiple_messages_are_echoed_in_order(
         for index in range(5):
             websocket.send_text(f"message-{index}")
 
-        received = [
-            websocket.receive_text()
-            for _ in range(5)
-        ]
+        received = [websocket.receive_text() for _ in range(5)]
 
-    assert received == [
-        f"message-{index}"
-        for index in range(5)
-    ]
+    assert received == [f"message-{index}" for index in range(5)]
 
 
 def test_empty_message_is_echoed(client: TestClient) -> None:
@@ -257,10 +260,7 @@ def test_json_payload_is_echoed_unchanged(
     client: TestClient,
 ) -> None:
     """The echo is byte-for-byte; it does not parse or reformat."""
-    payload = (
-        '{"tool": "open_application", '
-        '"args": {"app_name": "chrome"}}'
-    )
+    payload = '{"tool": "open_application", "args": {"app_name": "chrome"}}'
 
     with client.websocket_connect(
         "/ws",
@@ -329,11 +329,7 @@ def test_client_disconnect_is_handled_cleanly(
 def test_websocket_route_is_registered(
     app: FastAPI,
 ) -> None:
-    paths = {
-        route.path
-        for route in app.routes
-        if hasattr(route, "path")
-    }
+    paths = {route.path for route in app.routes if hasattr(route, "path")}
 
     assert "/ws" in paths
 

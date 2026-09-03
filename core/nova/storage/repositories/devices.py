@@ -31,9 +31,7 @@ class DeviceRepository:
 
     async def get_by_name(self, name: str) -> Device | None:
         """Return the device with this name, or None."""
-        result = await self._session.execute(
-            select(Device).where(Device.name == name)
-        )
+        result = await self._session.execute(select(Device).where(Device.name == name))
         return result.scalar_one_or_none()
 
     async def get_by_public_key(self, public_key: str) -> Device | None:
@@ -42,16 +40,12 @@ class DeviceRepository:
         Used during a pairing handshake to recognise a returning agent. The
         cryptographic verification itself is not done here.
         """
-        result = await self._session.execute(
-            select(Device).where(Device.public_key == public_key)
-        )
+        result = await self._session.execute(select(Device).where(Device.public_key == public_key))
         return result.scalar_one_or_none()
 
     async def list_all(self) -> Sequence[Device]:
         """Return every device, ordered by name."""
-        result = await self._session.execute(
-            select(Device).order_by(Device.name)
-        )
+        result = await self._session.execute(select(Device).order_by(Device.name))
         return result.scalars().all()
 
     async def list_authorized(self) -> Sequence[Device]:

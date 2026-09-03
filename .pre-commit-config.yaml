@@ -1,0 +1,46 @@
+# Pre-commit hooks for NOVA.
+#
+# Every hook uses `language: system`, meaning it runs the tool already
+# installed in the active virtual environment rather than a copy pinned by
+# pre-commit. That matters: a pre-commit-pinned ruff would drift from the
+# ruff used by `python -m ruff check .`, and a commit could pass one gate
+# while failing the other. One toolchain, one result.
+#
+# Install once after cloning:
+#   pre-commit install
+#
+# Run against everything without committing:
+#   pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: python -m ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff format
+        entry: python -m ruff format
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: mypy
+        name: mypy
+        entry: python -m mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+
+      - id: pytest
+        name: pytest
+        entry: python -m pytest -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true

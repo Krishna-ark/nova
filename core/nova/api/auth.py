@@ -33,7 +33,7 @@ def extract_bearer_token(authorization_header: str | None) -> str | None:
     if not authorization_header.lower().startswith(_BEARER_PREFIX):
         return None
 
-    token = authorization_header[len(_BEARER_PREFIX):].strip()
+    token = authorization_header[len(_BEARER_PREFIX) :].strip()
 
     return token or None
 

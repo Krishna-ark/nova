@@ -1,4 +1,4 @@
-﻿"""Repository layer for NOVA storage.
+"""Repository layer for NOVA storage.
 
 Repositories own database access only. Business rules, permission decisions
 and device lifecycle logic live above this layer, and transaction boundaries
