@@ -1,8 +1,8 @@
 """FastAPI application factory for NOVA.
 
-Group 4A scope: the two unauthenticated status endpoints only. There is no
-authentication, no WebSocket, no database access and no tool execution here
-yet; those arrive in later groups.
+Scope so far: two unauthenticated status endpoints and one authenticated
+WebSocket echo. There is no database access and no tool execution here yet;
+those arrive in later groups.
 
 The application is built by a factory rather than created at import time.
 A module-level ``app = FastAPI()`` would bind configuration at import, which
@@ -13,10 +13,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 
 from nova import __version__
+from nova.api.websocket import websocket_echo
 
 if TYPE_CHECKING:
     from nova.config.settings import Settings
@@ -55,6 +56,8 @@ def create_app(settings: Settings) -> FastAPI:
         title="NOVA",
         version=__version__,
         summary="Permission-controlled AI agent operating layer",
+        # The interactive docs are useful locally. They are disabled in
+        # production so the API surface is not advertised.
         docs_url=None if settings.is_production else "/docs",
         redoc_url=None,
         openapi_url=None if settings.is_production else "/openapi.json",
@@ -63,7 +66,10 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/health", response_model=HealthResponse, tags=["status"])
     async def health() -> HealthResponse:
         """Report that the process is running."""
-        return HealthResponse(status="ok", version=__version__)
+        return HealthResponse(
+            status="ok",
+            version=__version__,
+        )
 
     @app.get("/version", response_model=VersionResponse, tags=["status"])
     async def version() -> VersionResponse:
@@ -73,5 +79,14 @@ def create_app(settings: Settings) -> FastAPI:
             version=__version__,
             environment=settings.environment,
         )
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket) -> None:
+        """Authenticated echo channel.
+
+        Requires ``Authorization: Bearer <token>``. The handshake is rejected
+        before it is accepted when the token is missing or wrong.
+        """
+        await websocket_echo(websocket, settings)
 
     return app
