@@ -88,7 +88,7 @@ class ToolOutcome(BaseModel):
     data: Mapping[str, str | int | float | bool | None] = Field(default_factory=dict)
 
 
-class Tool(ABC):
+class Tool[ToolArguments: BaseModel](ABC):
     """Base class for every NOVA capability.
 
     Subclasses declare ``metadata`` and ``input_model`` as class attributes.
@@ -100,7 +100,7 @@ class Tool(ABC):
     input_model: ClassVar[type[BaseModel]]
 
     @abstractmethod
-    async def execute(self, arguments: BaseModel) -> ToolOutcome:
+    async def execute(self, arguments: ToolArguments) -> ToolOutcome:
         """Perform the tool's work.
 
         Args:
@@ -112,7 +112,7 @@ class Tool(ABC):
 
     async def verify(
         self,
-        arguments: BaseModel,
+        arguments: ToolArguments,
         outcome: ToolOutcome,
     ) -> bool | None:
         """Confirm the tool's effect actually happened.

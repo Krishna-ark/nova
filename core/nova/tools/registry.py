@@ -9,6 +9,8 @@ exists and what it requires, but execution must go through ToolExecutor.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel
 
 from nova.tools.base import Tool, ToolMetadata
@@ -22,9 +24,9 @@ class ToolRegistry:
     """Immutable-by-convention collection of validated tool classes."""
 
     def __init__(self) -> None:
-        self._tools: dict[str, type[Tool]] = {}
+        self._tools: dict[str, type[Tool[Any]]] = {}
 
-    def register(self, tool: type[Tool]) -> None:
+    def register(self, tool: type[Tool[Any]]) -> None:
         """Register a tool class after validating its declaration."""
         if not issubclass(tool, Tool):
             raise ToolRegistrationError("registered object must subclass Tool")
@@ -43,7 +45,7 @@ class ToolRegistry:
 
         self._tools[metadata.tool_id] = tool
 
-    def get(self, tool_id: str) -> type[Tool] | None:
+    def get(self, tool_id: str) -> type[Tool[Any]] | None:
         """Return the registered tool class, or None when unknown."""
         return self._tools.get(tool_id)
 
