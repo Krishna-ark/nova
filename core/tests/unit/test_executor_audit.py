@@ -69,6 +69,23 @@ class RaisingTool(Tool[AuditArguments]):
         raise RuntimeError("defect")
 
 
+class InvalidOutcomeTool(Tool[AuditArguments]):
+    """Return an object outside the executor's result contract."""
+
+    metadata: ClassVar[ToolMetadata] = ToolMetadata(
+        tool_id="invalid_audit_outcome",
+        name="Invalid outcome tool",
+        description="Tool used to test invalid outcome audit persistence.",
+        risk=RiskLevel.LOW,
+        required_permission="test.invalid_audit_outcome",
+    )
+    input_model: ClassVar[type[BaseModel]] = AuditArguments
+
+    async def execute(self, arguments: AuditArguments) -> ToolOutcome:
+        _ = arguments
+        return object()  # type: ignore[return-value]
+
+
 @pytest.fixture
 async def database(tmp_path: Path) -> AsyncIterator[Database]:
     """Yield a database with the full schema, then dispose it."""
@@ -200,6 +217,26 @@ async def test_tool_exception_is_audited_and_reraised(session: AsyncSession) -> 
     assert event.decision is AuditDecision.ALLOW
     assert event.result is AuditResult.FAILED
     assert event.detail == "Tool execution raised an unhandled exception."
+    _assert_hash_is_valid(event)
+
+
+async def test_invalid_tool_outcome_is_audited(session: AsyncSession) -> None:
+    executor = _executor(
+        session,
+        InvalidOutcomeTool,
+        permission="test.invalid_audit_outcome",
+    )
+
+    with pytest.raises(ToolExecutionError, match="returned an invalid outcome"):
+        await executor.execute(
+            "invalid_audit_outcome",
+            AuditArguments(message="invalid"),
+        )
+    await session.commit()
+
+    event = (await AuditEventRepository(session).list_recent())[0]
+    assert event.result is AuditResult.FAILED
+    assert event.detail == "Tool 'invalid_audit_outcome' returned an invalid outcome."
     _assert_hash_is_valid(event)
 
 

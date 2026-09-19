@@ -9,6 +9,7 @@ exists and what it requires, but execution must go through ToolExecutor.
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from pydantic import BaseModel
@@ -28,8 +29,11 @@ class ToolRegistry:
 
     def register(self, tool: type[Tool[Any]]) -> None:
         """Register a tool class after validating its declaration."""
-        if not issubclass(tool, Tool):
+        if not isinstance(tool, type) or not issubclass(tool, Tool):
             raise ToolRegistrationError("registered object must subclass Tool")
+
+        if inspect.isabstract(tool):
+            raise ToolRegistrationError(f"{tool.__name__} must implement execute")
 
         metadata = getattr(tool, "metadata", None)
         input_model = getattr(tool, "input_model", None)
@@ -39,6 +43,14 @@ class ToolRegistry:
 
         if not isinstance(input_model, type) or not issubclass(input_model, BaseModel):
             raise ToolRegistrationError(f"{tool.__name__} must declare a Pydantic input_model")
+
+        if not inspect.iscoroutinefunction(tool.execute):
+            raise ToolRegistrationError(f"{tool.__name__}.execute must be async")
+
+        if metadata.verification.value != "none" and tool.verify is Tool.verify:
+            raise ToolRegistrationError(
+                f"{tool.__name__} must implement verify when verification is declared"
+            )
 
         if metadata.tool_id in self._tools:
             raise ToolRegistrationError(f"tool id already registered: {metadata.tool_id}")

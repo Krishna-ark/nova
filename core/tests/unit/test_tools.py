@@ -108,6 +108,47 @@ class MissingInputModelTool(Tool[BaseModel]):
         return ToolOutcome(ok=True)
 
 
+class AbstractTool(Tool[EchoArguments]):
+    metadata: ClassVar[ToolMetadata] = EchoTool.metadata
+    input_model: ClassVar[type[BaseModel]] = EchoArguments
+
+
+class SyncTool(Tool[EchoArguments]):
+    metadata: ClassVar[ToolMetadata] = EchoTool.metadata.model_copy(update={"tool_id": "sync_tool"})
+    input_model: ClassVar[type[BaseModel]] = EchoArguments
+
+    def execute(  # type: ignore[override]
+        self,
+        arguments: EchoArguments,
+    ) -> ToolOutcome:
+        return ToolOutcome(ok=True, data={"message": arguments.message})
+
+
+class InvalidOutcomeTool(Tool[EchoArguments]):
+    metadata: ClassVar[ToolMetadata] = EchoTool.metadata.model_copy(
+        update={"tool_id": "invalid_outcome"}
+    )
+    input_model: ClassVar[type[BaseModel]] = EchoArguments
+
+    async def execute(self, arguments: EchoArguments) -> ToolOutcome:
+        _ = arguments
+        return cast(ToolOutcome, object())
+
+
+class MissingVerificationTool(Tool[EchoArguments]):
+    metadata: ClassVar[ToolMetadata] = EchoTool.metadata.model_copy(
+        update={
+            "tool_id": "missing_verification",
+            "verification": VerificationLevel.STATE_QUERY,
+        }
+    )
+    input_model: ClassVar[type[BaseModel]] = EchoArguments
+
+    async def execute(self, arguments: EchoArguments) -> ToolOutcome:
+        _ = arguments
+        return ToolOutcome(ok=True)
+
+
 def _executor(
     tool: type[Tool[Any]],
     *,
@@ -166,6 +207,27 @@ def test_registry_rejects_non_tool_object() -> None:
 
     with pytest.raises(ToolRegistrationError, match="must subclass Tool"):
         registry.register(cast(type[Tool[Any]], object))
+
+
+def test_registry_rejects_abstract_tool() -> None:
+    registry = ToolRegistry()
+
+    with pytest.raises(ToolRegistrationError, match="must implement execute"):
+        registry.register(cast(type[Tool[Any]], AbstractTool))
+
+
+def test_registry_rejects_sync_tool() -> None:
+    registry = ToolRegistry()
+
+    with pytest.raises(ToolRegistrationError, match="execute must be async"):
+        registry.register(SyncTool)
+
+
+def test_registry_rejects_missing_verification_implementation() -> None:
+    registry = ToolRegistry()
+
+    with pytest.raises(ToolRegistrationError, match="must implement verify"):
+        registry.register(MissingVerificationTool)
 
 
 def test_registry_rejects_missing_metadata() -> None:
@@ -296,6 +358,25 @@ async def test_executor_revalidates_arguments() -> None:
         await executor.execute(
             "echo",
             cast(BaseModel, WrongArguments(message=123)),
+        )
+
+
+@pytest.mark.asyncio
+async def test_executor_rejects_non_model_arguments() -> None:
+    executor = _executor(EchoTool, permission="test.echo")
+
+    with pytest.raises(ToolExecutionError, match="invalid arguments for tool 'echo'"):
+        await executor.execute("echo", cast(BaseModel, {"message": "hello"}))
+
+
+@pytest.mark.asyncio
+async def test_executor_rejects_invalid_tool_outcome() -> None:
+    executor = _executor(InvalidOutcomeTool, permission="test.echo")
+
+    with pytest.raises(ToolExecutionError, match="returned an invalid outcome"):
+        await executor.execute(
+            "invalid_outcome",
+            EchoArguments(message="hello"),
         )
 
 

@@ -105,7 +105,9 @@ class ToolExecutor:
             )
 
         try:
-            validated_arguments = tool_class.input_model.model_validate(arguments.model_dump())
+            if not isinstance(arguments, BaseModel):
+                raise TypeError("tool arguments must be a Pydantic model")
+            validated_arguments = tool_class.input_model.model_validate(arguments)
         except ValidationError as exc:
             await self._record_audit_event(
                 tool_id=tool_id,
@@ -115,10 +117,29 @@ class ToolExecutor:
                 detail=f"Invalid arguments for tool '{tool_id}'",
             )
             raise ToolExecutionError(f"invalid arguments for tool '{tool_id}'") from exc
+        except TypeError as exc:
+            await self._record_audit_event(
+                tool_id=tool_id,
+                arguments=arguments if isinstance(arguments, BaseModel) else None,
+                decision=AuditDecision.ALLOW,
+                result=AuditResult.FAILED,
+                detail=f"Invalid arguments for tool '{tool_id}'",
+            )
+            raise ToolExecutionError(f"invalid arguments for tool '{tool_id}'") from exc
 
         tool = tool_class()
         try:
-            outcome = await tool.execute(validated_arguments)
+            raw_outcome: object = await tool.execute(validated_arguments)
+            if not isinstance(raw_outcome, ToolOutcome):
+                await self._record_audit_event(
+                    tool_id=tool_id,
+                    arguments=validated_arguments,
+                    decision=AuditDecision.ALLOW,
+                    result=AuditResult.FAILED,
+                    detail=f"Tool '{tool_id}' returned an invalid outcome.",
+                )
+                raise ToolExecutionError(f"tool '{tool_id}' returned an invalid outcome")
+            outcome = raw_outcome
             if tool.metadata.verification.value != "none":
                 verification = await tool.verify(validated_arguments, outcome)
 
@@ -157,7 +178,7 @@ class ToolExecutor:
         self,
         *,
         tool_id: str,
-        arguments: BaseModel,
+        arguments: BaseModel | None,
         decision: AuditDecision,
         result: AuditResult,
         detail: str | None,
@@ -169,7 +190,7 @@ class ToolExecutor:
         previous_events = await self._audit_events.list_recent(limit=1)
         prev_hash = previous_events[0].hash if previous_events else GENESIS_HASH
         occurred_at = utcnow()
-        args_hash = self._arguments_hash(arguments)
+        args_hash = self._arguments_hash(arguments) if arguments is not None else None
         occurred_at_value = occurred_at.isoformat()
 
         event = AuditEvent(
