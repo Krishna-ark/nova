@@ -107,7 +107,7 @@ class ToolExecutor:
         try:
             if not isinstance(arguments, BaseModel):
                 raise TypeError("tool arguments must be a Pydantic model")
-            validated_arguments = tool_class.input_model.model_validate(arguments)
+            validated_arguments = tool_class.input_model.model_validate(arguments.model_dump())
         except ValidationError as exc:
             await self._record_audit_event(
                 tool_id=tool_id,

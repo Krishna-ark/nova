@@ -60,6 +60,12 @@ def test_create_app_returns_a_fastapi_instance(app: FastAPI) -> None:
     assert isinstance(app, FastAPI)
 
 
+def test_command_websocket_route_is_registered(app: FastAPI) -> None:
+    paths = {route.path for route in app.routes if hasattr(route, "path")}
+
+    assert "/ws/commands" in paths
+
+
 def test_app_reports_the_package_version(app: FastAPI) -> None:
     assert app.version == __version__
 

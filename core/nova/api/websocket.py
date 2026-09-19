@@ -22,8 +22,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from fastapi import WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
 
 from nova.api.auth import extract_bearer_token, token_is_valid
+from nova.api.commands import CommandService, ToolCommand
+from nova.tools.executor import ToolExecutionError
 from nova.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -47,17 +50,8 @@ async def websocket_echo(websocket: WebSocket, settings: Settings) -> None:
         websocket: The incoming connection.
         settings: Validated application configuration.
     """
-    provided = extract_bearer_token(websocket.headers.get("authorization"))
-
-    if not token_is_valid(
-        provided,
-        settings.security.auth_token,
-    ):
+    if not _authenticate(websocket, settings):
         # Closing before accept() rejects the handshake outright.
-        logger.warning(
-            "websocket_auth_failed",
-            client=_client_label(websocket),
-        )
         await websocket.close(code=CLOSE_POLICY_VIOLATION)
         return
 
@@ -88,6 +82,94 @@ async def websocket_echo(websocket: WebSocket, settings: Settings) -> None:
             "websocket_disconnected",
             client=_client_label(websocket),
         )
+
+
+async def websocket_commands(
+    websocket: WebSocket,
+    settings: Settings,
+    service: CommandService,
+) -> None:
+    """Authenticate and execute structured tool commands."""
+    if not _authenticate(websocket, settings):
+        await websocket.close(code=CLOSE_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+
+    try:
+        while True:
+            message = await websocket.receive_text()
+
+            if len(message) > MAX_MESSAGE_LENGTH:
+                await websocket.close(code=CLOSE_POLICY_VIOLATION)
+                return
+
+            try:
+                command = ToolCommand.model_validate_json(message)
+            except (ValidationError, ValueError):
+                await websocket.send_json(
+                    {
+                        "type": "tool.error",
+                        "request_id": None,
+                        "code": "invalid_command",
+                        "detail": "Invalid tool command.",
+                    }
+                )
+                continue
+
+            try:
+                outcome = await service.execute(command)
+            except ToolExecutionError as exc:
+                await websocket.send_json(
+                    {
+                        "type": "tool.error",
+                        "request_id": command.request_id,
+                        "code": "tool_execution_failed",
+                        "detail": str(exc),
+                    }
+                )
+                continue
+            except Exception:
+                logger.exception("websocket_command_failed")
+                await websocket.send_json(
+                    {
+                        "type": "tool.error",
+                        "request_id": command.request_id,
+                        "code": "internal_error",
+                        "detail": "The command could not be completed.",
+                    }
+                )
+                continue
+
+            await websocket.send_json(
+                {
+                    "type": "tool.result",
+                    "request_id": command.request_id,
+                    "ok": outcome.ok,
+                    "detail": outcome.detail,
+                    "data": outcome.data,
+                }
+            )
+
+    except WebSocketDisconnect:
+        logger.info(
+            "websocket_disconnected",
+            client=_client_label(websocket),
+        )
+
+
+def _authenticate(websocket: WebSocket, settings: Settings) -> bool:
+    """Validate the configured bearer token before accepting a socket."""
+    provided = extract_bearer_token(websocket.headers.get("authorization"))
+
+    if token_is_valid(provided, settings.security.auth_token):
+        return True
+
+    logger.warning(
+        "websocket_auth_failed",
+        client=_client_label(websocket),
+    )
+    return False
 
 
 def _client_label(websocket: WebSocket) -> str:

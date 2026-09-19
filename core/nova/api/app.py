@@ -11,13 +11,20 @@ makes it impossible for a test to build an app with different settings.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 
 from nova import __version__
-from nova.api.websocket import websocket_echo
+from nova.api.commands import CommandService
+from nova.api.websocket import websocket_commands, websocket_echo
+from nova.permissions.engine import PermissionEngine
+from nova.permissions.policy import PermissionPolicy
+from nova.storage import Database
+from nova.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
     from nova.config.settings import Settings
@@ -43,7 +50,13 @@ class VersionResponse(BaseModel):
     environment: str
 
 
-def create_app(settings: Settings) -> FastAPI:
+def create_app(
+    settings: Settings,
+    *,
+    database: Database | None = None,
+    registry: ToolRegistry | None = None,
+    permissions: PermissionEngine | None = None,
+) -> FastAPI:
     """Build the NOVA API application.
 
     Args:
@@ -52,10 +65,29 @@ def create_app(settings: Settings) -> FastAPI:
     Returns:
         A configured FastAPI instance with the status routes registered.
     """
+    owned_database = database is None
+    active_database = database or Database(settings.database)
+    active_registry = registry or ToolRegistry()
+    active_permissions = permissions or PermissionEngine(PermissionPolicy())
+    command_service = CommandService(
+        active_database,
+        active_registry,
+        active_permissions,
+    )
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if owned_database:
+                await active_database.dispose()
+
     app = FastAPI(
         title="NOVA",
         version=__version__,
         summary="Permission-controlled AI agent operating layer",
+        lifespan=lifespan,
         # The interactive docs are useful locally. They are disabled in
         # production so the API surface is not advertised.
         docs_url=None if settings.is_production else "/docs",
@@ -88,5 +120,10 @@ def create_app(settings: Settings) -> FastAPI:
         before it is accepted when the token is missing or wrong.
         """
         await websocket_echo(websocket, settings)
+
+    @app.websocket("/ws/commands")
+    async def command_websocket_endpoint(websocket: WebSocket) -> None:
+        """Authenticated structured tool-command channel."""
+        await websocket_commands(websocket, settings, command_service)
 
     return app
