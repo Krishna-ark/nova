@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from nova.api import create_app
-from nova.api.commands import CommandService, ToolCommand
+from nova.api.commands import CommandService, ToolCommand, ToolListCommand, parse_command
 from nova.config import DatabaseSettings, Settings
 from nova.permissions.engine import PermissionEngine
 from nova.permissions.policy import PermissionPolicy, PermissionRule
@@ -37,6 +37,21 @@ class CommandTool(Tool[CommandArguments]):
         description="Echo a command message.",
         risk=RiskLevel.LOW,
         required_permission="test.command_echo",
+    )
+    input_model: ClassVar[type[BaseModel]] = CommandArguments
+
+    async def execute(self, arguments: CommandArguments) -> ToolOutcome:
+        return ToolOutcome(ok=True, data={"message": arguments.message})
+
+
+class LaterCommandTool(Tool[CommandArguments]):
+    metadata: ClassVar[ToolMetadata] = ToolMetadata(
+        tool_id="later_command",
+        name="Later command",
+        description="A second command tool.",
+        risk=RiskLevel.MEDIUM,
+        required_permission="test.later_command",
+        idempotent=True,
     )
     input_model: ClassVar[type[BaseModel]] = CommandArguments
 
@@ -158,6 +173,31 @@ def test_command_requires_tool_execute_type() -> None:
         )
 
 
+def test_parse_command_accepts_a_tool_catalog_request() -> None:
+    command = parse_command('{"type":"tools.list","request_id":"catalog-1"}')
+
+    assert command == ToolListCommand(type="tools.list", request_id="catalog-1")
+
+
+def test_tool_catalog_request_rejects_execution_fields() -> None:
+    with pytest.raises(ValueError):
+        parse_command('{"type":"tools.list","request_id":"catalog-2","arguments":{}}')
+
+
+async def test_command_service_lists_registered_metadata_in_tool_id_order(
+    database: Database,
+) -> None:
+    registry = ToolRegistry()
+    registry.register(LaterCommandTool)
+    registry.register(CommandTool)
+    service = CommandService(database, registry, PermissionEngine(PermissionPolicy()))
+
+    assert service.list_tools() == (CommandTool.metadata, LaterCommandTool.metadata)
+
+    async with database.session() as session:
+        assert await AuditEventRepository(session).count() == 0
+
+
 def test_command_websocket_returns_structured_result(tmp_path: Path) -> None:
     database = Database(DatabaseSettings(path=tmp_path / "socket.db"))
     registry = ToolRegistry()
@@ -204,6 +244,19 @@ def test_command_websocket_returns_structured_result(tmp_path: Path) -> None:
                 "ok": True,
                 "detail": None,
                 "data": {"message": "hello"},
+            }
+
+            websocket.send_json(
+                {
+                    "type": "tools.list",
+                    "request_id": "catalog-1",
+                }
+            )
+
+            assert websocket.receive_json() == {
+                "type": "tools.list.result",
+                "request_id": "catalog-1",
+                "tools": [CommandTool.metadata.model_dump(mode="json")],
             }
 
             websocket.send_json({"type": "invalid"})

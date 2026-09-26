@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 
 from nova.permissions.engine import PermissionEngine
 from nova.storage import Database
 from nova.storage.repositories import AuditEventRepository
-from nova.tools.base import ToolOutcome
+from nova.tools.base import ToolMetadata, ToolOutcome
 from nova.tools.executor import ToolExecutionError, ToolExecutor
 from nova.tools.registry import ToolRegistry
 
@@ -27,6 +27,19 @@ class ToolCommand(BaseModel):
         pattern=r"^[a-z][a-z0-9_]*$",
     )
     arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolListCommand(BaseModel):
+    """A read-only request for the registered tool catalog."""
+
+    model_config = {"extra": "forbid"}
+
+    type: Literal["tools.list"]
+    request_id: str = Field(min_length=1, max_length=128)
+
+
+type Command = ToolCommand | ToolListCommand
+_COMMAND_ADAPTER: TypeAdapter[Command] = TypeAdapter(Command)
 
 
 class CommandService:
@@ -65,6 +78,15 @@ class CommandService:
             await session.commit()
             return outcome
 
+    def list_tools(self) -> tuple[ToolMetadata, ...]:
+        """Return a stable, declarative catalog without invoking any tool."""
+        return tuple(sorted(self._registry.metadata(), key=lambda metadata: metadata.tool_id))
+
+
+def parse_command(payload: str) -> Command:
+    """Validate one JSON command against the supported protocol variants."""
+    return _COMMAND_ADAPTER.validate_json(payload)
+
 
 def _arguments_model(arguments: dict[str, Any]) -> BaseModel:
     """Wrap transport arguments for executor-side model validation."""
@@ -87,8 +109,11 @@ async def execute_command(
 
 
 __all__ = [
+    "Command",
     "CommandService",
     "ToolCommand",
     "ToolExecutionError",
+    "ToolListCommand",
     "execute_command",
+    "parse_command",
 ]

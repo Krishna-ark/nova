@@ -1,9 +1,10 @@
-"""Authenticated WebSocket endpoint for NOVA.
+"""Authenticated WebSocket endpoints for NOVA.
 
-Group 4B scope: an echo endpoint that proves the authenticated bidirectional
-channel works. It carries no commands, invokes no tools and touches no
-database. The planner, tool execution and device protocol all arrive later
-and will reuse this connection.
+The echo WebSocket authenticates clients before echoing text frames. The
+structured command WebSocket authenticates clients before accepting tool
+commands, routes ``tool.execute`` requests through the command service, and
+serves the registered tool catalog for ``tools.list`` requests. Catalog
+discovery returns metadata without executing a tool.
 
 Authentication happens **before** the handshake is accepted. Accepting first
 and closing afterwards would briefly grant an unauthenticated client an open
@@ -25,7 +26,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from nova.api.auth import extract_bearer_token, token_is_valid
-from nova.api.commands import CommandService, ToolCommand
+from nova.api.commands import CommandService, ToolCommand, parse_command
 from nova.tools.executor import ToolExecutionError
 from nova.utils.logging import get_logger
 
@@ -105,7 +106,7 @@ async def websocket_commands(
                 return
 
             try:
-                command = ToolCommand.model_validate_json(message)
+                command = parse_command(message)
             except (ValidationError, ValueError):
                 await websocket.send_json(
                     {
@@ -113,6 +114,18 @@ async def websocket_commands(
                         "request_id": None,
                         "code": "invalid_command",
                         "detail": "Invalid tool command.",
+                    }
+                )
+                continue
+
+            if not isinstance(command, ToolCommand):
+                await websocket.send_json(
+                    {
+                        "type": "tools.list.result",
+                        "request_id": command.request_id,
+                        "tools": [
+                            metadata.model_dump(mode="json") for metadata in service.list_tools()
+                        ],
                     }
                 )
                 continue
